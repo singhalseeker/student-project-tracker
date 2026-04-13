@@ -3,12 +3,12 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAB35y2arDKgCHVnM3FwihXQoC_lwoFO18",
-  authDomain: "student-project-tracker-771a5.firebaseapp.com",
-  projectId: "student-project-tracker-771a5",
-  storageBucket: "student-project-tracker-771a5.firebasestorage.app",
-  messagingSenderId: "1009617018125",
-  appId: "1:1009617018125:web:58868e915249bb9a14e444"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
