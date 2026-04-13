@@ -87,9 +87,10 @@ function Field({ label, children }) {
 function LoginPage() {
   const [loading, setLoading] = useState(false);
 
-  async function handleGoogle() {
+async function handleGoogle() {
   setLoading(true);
   try {
+    googleProvider.setCustomParameters({ prompt: "select_account" }); // ← ADD THIS
     await signInWithPopup(auth, googleProvider);
   } catch (e) {
     console.error(e);
@@ -446,13 +447,7 @@ export default function App() {
 
   if (!user) return <LoginPage />;
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', sans-serif", background: "#F0F4F8", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: 36 }}>📊</div>
-      <div style={{ fontWeight: 700, color: "#6C63FF", fontSize: 16 }}>Loading projects...</div>
-    </div>
-  );
-
+  
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#F0F4F8", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
@@ -477,9 +472,13 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, padding: "6px 12px", background: "#1E293B", borderRadius: 10, border: "1px solid #334155" }}>
             <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
             <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{user.displayName?.split(" ")[0]}</div>
-            <button onClick={() => signOut(auth)}
+            <button onClick={() => {
+              if (window.confirm("Are you sure you want to sign out?")) {
+                signOut(auth);
+                }
+            }}
               style={{ background: "none", border: "none", color: "#475569", fontSize: 11, cursor: "pointer", marginLeft: 4, fontWeight: 600 }}>Sign out</button>
-          </div>
+            </div>
         </div>
       </div>
 
