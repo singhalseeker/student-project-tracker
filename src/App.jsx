@@ -764,10 +764,18 @@ export default function App() {
       const loaded = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
       setProjects(loaded);
       setLoading(false);
-      if (loaded.length > 0 && !selectedId) setSelectedId(loaded[0].id);
     });
     return () => unsub();
   }, []);
+  // Auto-select first visible project based on user role
+useEffect(() => {
+  if (projects.length > 0 && userProfile && !selectedId) {
+    const visible = userProfile.role === "admin"
+      ? projects
+      : projects.filter(p => userProfile.assignedProjects?.includes(p.id));
+    if (visible.length > 0) setSelectedId(visible[0].id);
+  }
+}, [projects, userProfile]);
 // Filter projects based on role
 const visibleProjects = userProfile?.role === "admin"
   ? projects  // admin sees all
