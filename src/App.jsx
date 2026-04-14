@@ -401,6 +401,411 @@ function MentorRemarksPanel({ module, project, onClose, onSave }) {
   );
 }
 
+// ─── Leaderboard Component ───────────────────────────────────────────────────
+// Paste this entire block into App.jsx just above the AdminPanel component
+
+function Leaderboard({ onClose, projects }) {
+  const [view, setView] = useState("overall");
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [animateIn, setAnimateIn] = useState(false);
+
+  useEffect(() => {
+    setTimeout(() => setAnimateIn(true), 50);
+  }, []);
+
+  // ── Badge logic ──────────────────────────────────────────────────────────
+  function getBadges(stat, allStats) {
+    const badges = [];
+    if (allStats[0]?.name === stat.name) badges.push({ icon: "👑", label: "Top Performer" });
+    if (stat.completedModules > 0 && stat.completedModules === stat.totalModules) badges.push({ icon: "🎯", label: "Perfectionist" });
+    if (stat.hasHundred) badges.push({ icon: "💯", label: "Perfect Score" });
+    if (stat.inProgress >= 2) badges.push({ icon: "🔥", label: "On Fire" });
+    if (stat.completedModules >= 3) badges.push({ icon: "⚡", label: "Fast Mover" });
+    if (stat.multiProject) badges.push({ icon: "🌟", label: "All Rounder" });
+    if (stat.earlyBird) badges.push({ icon: "🚀", label: "Early Bird" });
+    return badges;
+  }
+
+  // ── Member stats ─────────────────────────────────────────────────────────
+  function getMemberStats(projectList) {
+    const stats = {};
+    const memberProjects = {};
+
+    projectList.forEach(p => {
+      (p.modules || []).forEach(m => {
+        (m.assignees || []).forEach(name => {
+          if (!stats[name]) {
+            stats[name] = {
+              name, totalModules: 0, completedModules: 0,
+              inProgress: 0, totalProgress: 0, avgProgress: 0,
+              hasHundred: false, earlyBird: false, multiProject: false,
+              projects: new Set()
+            };
+          }
+          stats[name].totalModules++;
+          stats[name].projects.add(p.id);
+          if (m.status === "done") stats[name].completedModules++;
+          if (m.status === "in-progress") stats[name].inProgress++;
+          if (m.progress === 100) stats[name].hasHundred = true;
+          if (m.status === "done" && m.deadline) {
+            const daysLeft = Math.ceil((new Date(m.deadline) - new Date()) / 86400000);
+            if (daysLeft > 2) stats[name].earlyBird = true;
+          }
+          stats[name].totalProgress += m.progress;
+        });
+      });
+    });
+
+    return Object.values(stats).map(s => ({
+      ...s,
+      multiProject: s.projects.size > 1,
+      avgProgress: s.totalModules > 0 ? Math.round(s.totalProgress / s.totalModules) : 0,
+    })).sort((a, b) => b.avgProgress - a.avgProgress);
+  }
+
+  // ── Project health ───────────────────────────────────────────────────────
+  function getProjectHealth(p) {
+    const total = p.modules?.length || 0;
+    if (total === 0) return { score: 0, label: "No Data", color: "#94A3B8" };
+    const progress = Math.round(p.modules.reduce((a, m) => a + m.progress, 0) / total);
+    const daysLeft = Math.ceil((new Date(p.deadline) - new Date()) / 86400000);
+    const overdueModules = p.modules.filter(m => m.status !== "done" && m.deadline && getDaysLeft(m.deadline) < 0).length;
+    let score = progress;
+    if (daysLeft < 7) score -= 15;
+    if (overdueModules > 0) score -= overdueModules * 10;
+    score = Math.max(0, Math.min(100, score));
+    const label = score >= 70 ? "Healthy" : score >= 40 ? "At Risk" : "Critical";
+    const color = score >= 70 ? "#10B981" : score >= 40 ? "#F59E0B" : "#EF4444";
+    return { score, label, color, progress, daysLeft };
+  }
+
+  const displayProjects = selectedProject ? projects.filter(p => p.id === selectedProject) : projects;
+  const memberStats = getMemberStats(displayProjects);
+
+  const medalColors = ["#F59E0B", "#94A3B8", "#CD7C2E"];
+  const medalEmoji = ["🥇", "🥈", "🥉"];
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 400,
+      background: "rgba(5, 8, 20, 0.92)",
+      backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'Segoe UI', system-ui, sans-serif",
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          width: "min(900px, 95vw)", maxHeight: "90vh",
+          background: "linear-gradient(145deg, #0F1629 0%, #141B2D 50%, #0A0F1E 100%)",
+          borderRadius: 24, border: "1px solid rgba(108, 99, 255, 0.3)",
+          boxShadow: "0 0 80px rgba(108, 99, 255, 0.15), 0 32px 64px rgba(0,0,0,0.6)",
+          overflow: "hidden", display: "flex", flexDirection: "column",
+          opacity: animateIn ? 1 : 0, transform: animateIn ? "scale(1) translateY(0)" : "scale(0.95) translateY(20px)",
+          transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}>
+
+        {/* Header */}
+        <div style={{
+          padding: "24px 28px 20px",
+          background: "linear-gradient(135deg, rgba(108,99,255,0.2) 0%, rgba(59,130,246,0.1) 100%)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", letterSpacing: "-0.5px", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 28 }}>🏆</span>
+              Student Leaderboard
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 3 }}>
+              Live rankings · Academic Year 2025–26
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* View Toggle */}
+            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: 4, display: "flex", gap: 4 }}>
+              {["overall", "projects"].map(v => (
+                <button key={v} onClick={() => setView(v)}
+                  style={{
+                    padding: "6px 14px", borderRadius: 7, border: "none", cursor: "pointer",
+                    background: view === v ? "#6C63FF" : "transparent",
+                    color: view === v ? "#fff" : "rgba(255,255,255,0.4)",
+                    fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em",
+                    transition: "all 0.2s"
+                  }}>
+                  {v === "overall" ? "🏅 Overall" : "📁 Projects"}
+                </button>
+              ))}
+            </div>
+            <button onClick={onClose}
+              style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY: "auto", flex: 1, padding: "24px 28px" }}>
+
+          {/* ── OVERALL VIEW ─────────────────────────────────────────────── */}
+          {view === "overall" && (
+            <div>
+              {/* Project filter pills */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+                <button onClick={() => setSelectedProject(null)}
+                  style={{ padding: "5px 14px", borderRadius: 99, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 11,
+                    background: !selectedProject ? "#6C63FF" : "rgba(255,255,255,0.07)",
+                    color: !selectedProject ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.2s" }}>
+                  All Projects
+                </button>
+                {projects.map(p => (
+                  <button key={p.id} onClick={() => setSelectedProject(p.id === selectedProject ? null : p.id)}
+                    style={{ padding: "5px 14px", borderRadius: 99, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 11,
+                      background: selectedProject === p.id ? p.color : "rgba(255,255,255,0.07)",
+                      color: selectedProject === p.id ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.2s" }}>
+                    {p.name.length > 20 ? p.name.slice(0, 18) + "…" : p.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Top 3 Podium */}
+              {memberStats.length >= 3 && (
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 12, marginBottom: 32, padding: "0 20px" }}>
+                  {[memberStats[1], memberStats[0], memberStats[2]].map((s, i) => {
+                    const rank = i === 1 ? 0 : i === 0 ? 1 : 2;
+                    const heights = [140, 180, 120];
+                    const badges = getBadges(s, memberStats);
+                    return (
+                      <div key={s.name} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        {/* Badge pills */}
+                        <div style={{ display: "flex", gap: 4, marginBottom: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                          {badges.slice(0, 2).map(b => (
+                            <span key={b.label} style={{ fontSize: 14 }} title={b.label}>{b.icon}</span>
+                          ))}
+                        </div>
+                        {/* Avatar */}
+                        <div style={{
+                          width: rank === 0 ? 64 : 52, height: rank === 0 ? 64 : 52,
+                          borderRadius: "50%", marginBottom: 8,
+                          background: `linear-gradient(135deg, ${medalColors[rank]}40, ${medalColors[rank]}20)`,
+                          border: `2px solid ${medalColors[rank]}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: rank === 0 ? 28 : 22,
+                          boxShadow: `0 0 20px ${medalColors[rank]}40`,
+                        }}>
+                          {s.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: rank === 0 ? 14 : 12, fontWeight: 800, color: "#fff", marginBottom: 4, textAlign: "center" }}>{s.name}</div>
+                        <div style={{ fontSize: rank === 0 ? 24 : 18, fontWeight: 900, color: medalColors[rank], marginBottom: 8 }}>{s.avgProgress}%</div>
+                        {/* Podium block */}
+                        <div style={{
+                          width: "100%", height: heights[i],
+                          background: `linear-gradient(180deg, ${medalColors[rank]}30 0%, ${medalColors[rank]}10 100%)`,
+                          border: `1px solid ${medalColors[rank]}40`,
+                          borderRadius: "10px 10px 0 0",
+                          display: "flex", alignItems: "flex-start", justifyContent: "center",
+                          paddingTop: 12, fontSize: 28,
+                        }}>
+                          {medalEmoji[rank]}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Full Rankings */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {memberStats.map((s, i) => {
+                  const badges = getBadges(s, memberStats);
+                  const isTop3 = i < 3;
+                  return (
+                    <div key={s.name}
+                      style={{
+                        background: isTop3 ? `linear-gradient(135deg, ${medalColors[i]}10, rgba(255,255,255,0.03))` : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${isTop3 ? medalColors[i] + "30" : "rgba(255,255,255,0.06)"}`,
+                        borderRadius: 14, padding: "14px 18px",
+                        display: "flex", alignItems: "center", gap: 14,
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(108,99,255,0.1)"}
+                      onMouseLeave={e => e.currentTarget.style.background = isTop3 ? `linear-gradient(135deg, ${medalColors[i]}10, rgba(255,255,255,0.03))` : "rgba(255,255,255,0.03)"}>
+
+                      {/* Rank */}
+                      <div style={{ width: 36, textAlign: "center", fontSize: isTop3 ? 20 : 14, fontWeight: 900, color: isTop3 ? medalColors[i] : "rgba(255,255,255,0.3)", flexShrink: 0 }}>
+                        {isTop3 ? medalEmoji[i] : `#${i + 1}`}
+                      </div>
+
+                      {/* Avatar */}
+                      <div style={{
+                        width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                        background: `linear-gradient(135deg, #6C63FF40, #3B82F620)`,
+                        border: "1.5px solid rgba(108,99,255,0.4)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 16, fontWeight: 900, color: "#6C63FF",
+                      }}>
+                        {s.name.charAt(0).toUpperCase()}
+                      </div>
+
+                      {/* Name + badges */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                          <span style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>{s.name}</span>
+                          {badges.map(b => (
+                            <span key={b.label} title={b.label} style={{ fontSize: 14 }}>{b.icon}</span>
+                          ))}
+                        </div>
+                        {/* Progress bar */}
+                        <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 99, height: 6, position: "relative", overflow: "hidden" }}>
+                          <div style={{
+                            width: `${s.avgProgress}%`, height: "100%", borderRadius: 99,
+                            background: isTop3
+                              ? `linear-gradient(90deg, ${medalColors[i]}, ${medalColors[i]}cc)`
+                              : "linear-gradient(90deg, #6C63FF, #3B82F6)",
+                            transition: "width 1s ease",
+                            boxShadow: `0 0 8px ${isTop3 ? medalColors[i] : "#6C63FF"}60`,
+                          }} />
+                        </div>
+                        <div style={{ display: "flex", gap: 10, marginTop: 5, fontSize: 10, color: "rgba(255,255,255,0.35)" }}>
+                          <span>📦 {s.totalModules} modules</span>
+                          <span>✅ {s.completedModules} done</span>
+                          <span>⚡ {s.inProgress} active</span>
+                        </div>
+                      </div>
+
+                      {/* Score */}
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{
+                          fontSize: 22, fontWeight: 900,
+                          color: s.avgProgress >= 70 ? "#10B981" : s.avgProgress >= 40 ? "#F59E0B" : "#EF4444",
+                          textShadow: `0 0 20px ${s.avgProgress >= 70 ? "#10B98160" : s.avgProgress >= 40 ? "#F59E0B60" : "#EF444460"}`,
+                        }}>
+                          {s.avgProgress}%
+                        </div>
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>avg progress</div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {memberStats.length === 0 && (
+                  <div style={{ textAlign: "center", color: "rgba(255,255,255,0.2)", padding: 48, fontSize: 14 }}>
+                    No member data yet. Assign members to modules first.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── PROJECTS VIEW ────────────────────────────────────────────── */}
+          {view === "projects" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>
+                Project health is calculated based on progress, deadlines, and overdue modules.
+              </div>
+              {[...projects].sort((a, b) => getProjectHealth(b).score - getProjectHealth(a).score).map((p, i) => {
+                const health = getProjectHealth(p);
+                const teamStats = getMemberStats([p]);
+                return (
+                  <div key={p.id}
+                    style={{
+                      background: "rgba(255,255,255,0.03)", borderRadius: 16,
+                      border: `1px solid ${health.color}30`, overflow: "hidden",
+                    }}>
+                    {/* Project header */}
+                    <div style={{
+                      padding: "16px 20px",
+                      background: `linear-gradient(135deg, ${health.color}15, transparent)`,
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      display: "flex", justifyContent: "space-between", alignItems: "center"
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ fontSize: 20 }}>{i === 0 ? "🏆" : i === 1 ? "🥈" : i === 2 ? "🥉" : "📁"}</div>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{p.team}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 26, fontWeight: 900, color: health.color, textShadow: `0 0 20px ${health.color}60` }}>{health.score}</div>
+                        <div style={{
+                          fontSize: 10, fontWeight: 800, textTransform: "uppercase",
+                          color: health.color, letterSpacing: "0.05em"
+                        }}>{health.label}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: "14px 20px" }}>
+                      {/* Health bar */}
+                      <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 99, height: 8, marginBottom: 12, overflow: "hidden" }}>
+                        <div style={{
+                          width: `${health.score}%`, height: "100%", borderRadius: 99,
+                          background: `linear-gradient(90deg, ${health.color}, ${health.color}99)`,
+                          boxShadow: `0 0 10px ${health.color}60`,
+                          transition: "width 1s ease"
+                        }} />
+                      </div>
+
+                      {/* Stats row */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 14 }}>
+                        {[
+                          { label: "Progress", value: `${health.progress}%`, color: p.color },
+                          { label: "Modules", value: p.modules?.length || 0, color: "#94A3B8" },
+                          { label: "Done", value: p.modules?.filter(m => m.status === "done").length || 0, color: "#10B981" },
+                          { label: "Days Left", value: health.daysLeft > 0 ? health.daysLeft : "Overdue", color: health.daysLeft < 7 ? "#EF4444" : "#F59E0B" },
+                        ].map(s => (
+                          <div key={s.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+                            <div style={{ fontSize: 16, fontWeight: 900, color: s.color }}>{s.value}</div>
+                            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontWeight: 700, textTransform: "uppercase", marginTop: 2 }}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Team mini leaderboard */}
+                      {teamStats.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Team Rankings</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            {teamStats.map((s, ti) => (
+                              <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 12, width: 20, color: "rgba(255,255,255,0.3)", fontWeight: 700 }}>#{ti + 1}</span>
+                                <span style={{ fontSize: 12, color: "#fff", fontWeight: 700, minWidth: 80 }}>{s.name}</span>
+                                <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: 99, height: 4 }}>
+                                  <div style={{ width: `${s.avgProgress}%`, height: "100%", borderRadius: 99, background: p.color, transition: "width 1s ease" }} />
+                                </div>
+                                <span style={{ fontSize: 12, fontWeight: 900, color: p.color, minWidth: 36, textAlign: "right" }}>{s.avgProgress}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: "12px 28px", borderTop: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "rgba(0,0,0,0.2)"
+        }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>
+            🏅 Rankings update in real-time · Based on module progress
+          </div>
+          <div style={{ display: "flex", gap: 12, fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
+            <span>👑 Top Performer</span>
+            <span>🎯 Perfectionist</span>
+            <span>⚡ Fast Mover</span>
+            <span>🔥 On Fire</span>
+            <span>🌟 All Rounder</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Panel Component ────────────────────────────────────────────────────
 // Add this entire component to your App.jsx just before the Main App function
 
@@ -817,6 +1222,8 @@ export default function App() {
   const [showLog, setShowLog] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [mentorRemarksModule, setMentorRemarksModule] = useState(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardProject, setLeaderboardProject] = useState("all");
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -1085,6 +1492,11 @@ if (userProfile && userProfile.active === false) return (
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+
+        <button onClick={() => setShowLeaderboard(true)}
+  style={{ background: "#1E293B", color: "#F59E0B", border: "1px solid #334155", borderRadius: 9, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+  🏆 Leaderboard
+</button>
         {/* Notification Bell */}
 <div style={{ position: "relative" }} data-notif="true">
   <button onClick={() => setShowNotifications(!showNotifications)}
@@ -1357,6 +1769,7 @@ if (userProfile && userProfile.active === false) return (
           onSave={saveMentorRemarks}
         />
       )}
+      {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} projects={projects} />}
       {showLog && <ActivityLog onClose={() => setShowLog(false)} />}
     </div>
   );
