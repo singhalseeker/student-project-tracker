@@ -817,6 +817,9 @@ export default function App() {
   const [showLog, setShowLog] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [mentorRemarksModule, setMentorRemarksModule] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const isEditing = useRef(false);
 
   useEffect(() => {
@@ -847,7 +850,24 @@ export default function App() {
     });
     return () => unsub();
   }, []);
-  // Auto-select first visible project based on user role
+  // Notifications listener
+useEffect(() => {
+  if (!user) return;
+  const q = query(
+    collection(db, "notifications"),
+    orderBy("timestamp", "desc"),
+    limit(20)
+  );
+  const unsub = onSnapshot(q, snap => {
+    const all = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(n => n.userId === user.email);
+    setNotifications(all);
+    setUnreadCount(all.filter(n => !n.read).length);
+  });
+  return () => unsub();
+}, [user]);
+// Auto-select first visible project based on user role
 useEffect(() => {
   if (projects.length > 0 && userProfile && !selectedId) {
     const visible = userProfile.role === "admin"
@@ -856,6 +876,13 @@ useEffect(() => {
     if (visible.length > 0) setSelectedId(visible[0].id);
   }
 }, [projects, userProfile]);
+
+// Check deadlines whenever projects load
+useEffect(() => {
+  if (projects.length > 0 && user) {
+    checkDeadlines(projects);
+  }
+}, [projects, user]);
 // Filter projects based on role
 const visibleProjects = userProfile?.role === "admin"
   ? projects  // admin sees all
@@ -875,6 +902,47 @@ const canEdit = userProfile?.role === "admin" ||
   const doneModules  = projects.reduce((a, p) => a + p.modules.filter(m => m.status === "done").length, 0);
   const inProg       = projects.reduce((a, p) => a + p.modules.filter(m => m.status === "in-progress").length, 0);
   const overall      = Math.round(projects.reduce((a, p) => a + getProjectProgress(p.modules), 0) / Math.max(projects.length, 1));
+
+async function checkDeadlines(projectsList) {
+  if (!user) return;
+  for (const project of projectsList) {
+    for (const module of project.modules || []) {
+      if (!module.deadline) continue;
+      const daysLeft = Math.ceil((new Date(module.deadline) - new Date()) / 86400000);
+      
+      // Only notify for pending/in-progress modules
+      if (module.status === "done") continue;
+
+      const notifId = `${user.email}_${project.id}_${module.id}`;
+      
+      if (daysLeft < 0) {
+        // Overdue
+        await setDoc(doc(db, "notifications", notifId), {
+          userId: user.email,
+          type: "overdue",
+          title: `🔴 Overdue: ${module.name}`,
+          message: `This module in "${project.name}" is overdue by ${Math.abs(daysLeft)} days!`,
+          projectName: project.name,
+          moduleName: module.name,
+          read: false,
+          timestamp: Date.now(),
+        }, { merge: true });
+      } else if (daysLeft <= 7) {
+        // Deadline soon
+        await setDoc(doc(db, "notifications", notifId), {
+          userId: user.email,
+          type: "warning",
+          title: `⚠️ Due Soon: ${module.name}`,
+          message: `"${module.name}" in "${project.name}" is due in ${daysLeft} day${daysLeft === 1 ? "" : "s"}!`,
+          projectName: project.name,
+          moduleName: module.name,
+          read: false,
+          timestamp: Date.now(),
+        }, { merge: true });
+      }
+    }
+  }
+}
 
   async function logActivity(action, description, projectName) {
     if (!user) return;
@@ -1000,6 +1068,56 @@ if (!userProfile) return (
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Notification Bell */}
+<div style={{ position: "relative" }} data-notif="true">
+  <button onClick={() => setShowNotifications(!showNotifications)}
+    style={{ background: "#1E293B", color: "#94A3B8", border: "1px solid #334155", borderRadius: 9, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+    🔔
+    {unreadCount > 0 && (
+      <span style={{ background: "#EF4444", color: "#fff", borderRadius: 99, padding: "1px 6px", fontSize: 10, fontWeight: 900, minWidth: 16, textAlign: "center" }}>
+        {unreadCount}
+      </span>
+    )}
+  </button>
+  {showNotifications && (
+    <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 340, background: "#fff", borderRadius: 14, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 500, border: "1.5px solid #E2E8F0", overflow: "hidden" }}>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 800, fontSize: 13, color: "#0F172A" }}>🔔 Notifications</div>
+        {unreadCount > 0 && (
+          <button onClick={async () => {
+            for (const n of notifications.filter(n => !n.read)) {
+              await setDoc(doc(db, "notifications", n.id), { read: true }, { merge: true });
+            }
+          }} style={{ background: "none", border: "none", color: "#6C63FF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            Mark all read
+          </button>
+        )}
+      </div>
+      <div style={{ maxHeight: 360, overflowY: "auto" }}>
+        {notifications.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center", color: "#CBD5E1", fontSize: 13 }}>No notifications yet 🎉</div>
+        ) : notifications.map(n => (
+          <div key={n.id}
+            onClick={async () => { await setDoc(doc(db, "notifications", n.id), { read: true }, { merge: true }); }}
+            style={{ padding: "12px 16px", borderBottom: "1px solid #F8FAFC", cursor: "pointer", background: n.read ? "#fff" : "#F8F7FF", position: "relative" }}
+            onMouseEnter={e => e.currentTarget.style.background = "#F1F5F9"}
+            onMouseLeave={e => e.currentTarget.style.background = n.read ? "#fff" : "#F8F7FF"}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: n.type === "overdue" ? "#EF4444" : "#F59E0B", marginBottom: 3 }}>{n.title}</div>
+            <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.5 }}>{n.message}</div>
+            <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 4 }}>{timeAgo(n.timestamp)}</div>
+            {!n.read && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#6C63FF", position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)" }} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
+{/* Activity Log */}
+<button onClick={() => setShowLog(true)}
+  style={{ background: "#1E293B", color: "#94A3B8", border: "1px solid #334155", borderRadius: 9, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+  📋 Activity Log
+</button>
           {userProfile?.role === "admin" && (
             <button onClick={() => setShowAdmin(true)}
               style={{ background: "#6C63FF", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
@@ -1015,14 +1133,14 @@ if (!userProfile) return (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, padding: "6px 12px", background: "#1E293B", borderRadius: 10, border: "1px solid #334155" }}>
             <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
             <div>
-              <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{user.displayName?.split(" ")[0]}</div>
-              {userProfile?.role === "mentor" && (
-                <div style={{ color: "#6C63FF", fontSize: 10, fontWeight: 700 }}>MENTOR</div>
-              )}
-              {userProfile?.role === "member" && (
-                <div style={{ color: "#10B981", fontSize: 10, fontWeight: 700 }}>MEMBER</div>
-              )}
-            </div>
+            <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{user.displayName?.split(" ")[0]}</div>
+            {userProfile?.role === "mentor" && (
+              <div style={{ color: "#6C63FF", fontSize: 10, fontWeight: 700 }}>MENTOR</div>
+            )}
+            {userProfile?.role === "member" && (
+              <div style={{ color: "#10B981", fontSize: 10, fontWeight: 700 }}>MEMBER</div>
+            )}
+          </div>
             <button onClick={() => {
               if (window.confirm("Are you sure you want to sign out?")) {
                 signOut(auth);
