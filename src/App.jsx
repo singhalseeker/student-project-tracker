@@ -322,6 +322,85 @@ function ProjectModal({ initial, onSave, onClose }) {
   );
 }
 
+// ─── Mentor Remarks Panel ─────────────────────────────────────────────────────
+function MentorRemarksPanel({ module, project, onClose, onSave }) {
+  const [remarks, setRemarks] = useState(module.remarks || "");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex" }}>
+      <div style={{ flex: 1, background: "rgba(15,23,42,0.45)", backdropFilter: "blur(3px)" }} onClick={onClose} />
+      <div style={{ width: 460, background: "#fff", height: "100%", overflowY: "auto", boxShadow: "-8px 0 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column" }}>
+        
+        {/* Header */}
+        <div style={{ padding: "18px 24px 14px", borderBottom: "1.5px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "#fff", zIndex: 10 }}>
+          <div>
+            <div style={{ fontSize: 11, color: project.color, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{project.name}</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "#0F172A" }}>📝 Faculty Remarks</div>
+          </div>
+          <button onClick={onClose} style={{ background: "#F1F5F9", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: "pointer", color: "#64748B" }}>×</button>
+        </div>
+
+        {/* Module Info - Read Only */}
+        <div style={{ padding: "16px 24px", background: "#F8FAFC", borderBottom: "1px solid #F1F5F9" }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", marginBottom: 8 }}>{module.name}</div>
+          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#64748B" }}>
+            <span>Progress: <strong>{module.progress}%</strong></span>
+            <span>Status: <strong>{module.status}</strong></span>
+            {module.deadline && <span>Deadline: <strong>{module.deadline}</strong></span>}
+          </div>
+          {module.assignees?.length > 0 && (
+            <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {module.assignees.map(a => (
+                <span key={a} style={{ fontSize: 11, background: "#F1F5F9", color: "#64748B", borderRadius: 99, padding: "1px 7px", fontWeight: 600 }}>👤 {a}</span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* What's Done & Going On - Read Only */}
+        <div style={{ padding: "16px 24px", display: "flex", flexDirection: "column", gap: 12, flex: 1 }}>
+          {module.whatsDone && (
+            <div style={{ background: "#F0FDF4", borderRadius: 10, padding: "11px 14px", borderLeft: "3px solid #10B981" }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>✅ What's Done</div>
+              <div style={{ fontSize: 12, color: "#1E293B", lineHeight: 1.65 }}>{module.whatsDone}</div>
+            </div>
+          )}
+          {module.whatsGoingOn && (
+            <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "11px 14px", borderLeft: "3px solid #F59E0B" }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>⚡ Going On Now</div>
+              <div style={{ fontSize: 12, color: "#1E293B", lineHeight: 1.65 }}>{module.whatsGoingOn}</div>
+            </div>
+          )}
+
+          {/* Remarks - Editable for mentor */}
+          <div style={{ background: "#F0F4FF", borderRadius: 10, padding: "11px 14px", borderLeft: "3px solid #6C63FF" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#6C63FF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>📝 Your Faculty Remarks</div>
+            <textarea
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+              rows={5}
+              placeholder="Add your feedback, guidance, or concerns here..."
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #C7D2FE", fontSize: 12, outline: "none", resize: "vertical", lineHeight: 1.65, fontFamily: "inherit", boxSizing: "border-box", background: "#fff" }}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "14px 24px", borderTop: "1.5px solid #F1F5F9", display: "flex", gap: 10, background: "#fff", position: "sticky", bottom: 0 }}>
+          <button onClick={onClose}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1.5px solid #E2E8F0", background: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13, color: "#64748B" }}>
+            Cancel
+          </button>
+          <button onClick={() => onSave({ ...module, remarks })}
+            style={{ flex: 2, padding: "10px", borderRadius: 8, border: "none", background: "#6C63FF", color: "#fff", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>
+            Save Remarks
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Panel Component ────────────────────────────────────────────────────
 // Add this entire component to your App.jsx just before the Main App function
 
@@ -737,6 +816,7 @@ export default function App() {
   const [expandedRemark, setExpandedRemark] = useState(null);
   const [showLog, setShowLog] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [mentorRemarksModule, setMentorRemarksModule] = useState(null);
   const isEditing = useRef(false);
 
   useEffect(() => {
@@ -811,7 +891,18 @@ const canEdit = userProfile?.role === "admin" ||
     const { id, ...data } = project;
     await setDoc(doc(db, "projects", String(id)), data);
   }
-
+  async function saveMentorRemarks(updated) {
+  const updatedProject = projects.find(p => p.id === selectedId);
+  if (!updatedProject) return;
+  const newModules = updatedProject.modules.map(m =>
+    m.id === updated.id ? { ...m, remarks: updated.remarks } : m
+  );
+  const newProject = { ...updatedProject, modules: newModules };
+  setProjects(ps => ps.map(p => p.id === selectedId ? newProject : p));
+  await saveProjectToFirebase(newProject);
+  await logActivity("updated", `remarks on "${updated.name}"`, updatedProject.name);
+  setMentorRemarksModule(null);
+}
   async function saveModule(updated) {
     const updatedProject = projects.find(p => p.id === selectedId);
     if (!updatedProject) return;
@@ -923,7 +1014,15 @@ if (!userProfile) return (
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, padding: "6px 12px", background: "#1E293B", borderRadius: 10, border: "1px solid #334155" }}>
             <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
-            <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{user.displayName?.split(" ")[0]}</div>
+            <div>
+              <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{user.displayName?.split(" ")[0]}</div>
+              {userProfile?.role === "mentor" && (
+                <div style={{ color: "#6C63FF", fontSize: 10, fontWeight: 700 }}>MENTOR</div>
+              )}
+              {userProfile?.role === "member" && (
+                <div style={{ color: "#10B981", fontSize: 10, fontWeight: 700 }}>MEMBER</div>
+              )}
+            </div>
             <button onClick={() => {
               if (window.confirm("Are you sure you want to sign out?")) {
                 signOut(auth);
@@ -1077,6 +1176,10 @@ if (!userProfile) return (
                         <button onClick={() => setOpenModuleId(m.id)}
                           style={{ background: "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#475569" }}>✏️ Edit</button>
                       )}
+                      {userProfile?.role === "mentor" && (
+                        <button onClick={() => setMentorRemarksModule(m)}
+                          style={{ background: "#EEF2FF", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#6C63FF" }}>📝 Remark</button>
+                      )}
                     </div>
                     {isExp && hasRemarks && (
                       <div style={{ padding: "0 20px 14px 20px", display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
@@ -1111,6 +1214,14 @@ if (!userProfile) return (
       {openModule && <ModulePanel module={openModule} project={selected} onClose={() => setOpenModuleId(null)} onSave={saveModule} onDelete={deleteModule} />}
       {projectModal && <ProjectModal initial={projectModal === "new" ? null : projectModal} onSave={handleProjectSave} onClose={() => setProjectModal(null)} />}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} projects={projects} db={db} />}
+      {mentorRemarksModule && selected && (
+        <MentorRemarksPanel
+          module={mentorRemarksModule}
+          project={selected}
+          onClose={() => setMentorRemarksModule(null)}
+          onSave={saveMentorRemarks}
+        />
+      )}
       {showLog && <ActivityLog onClose={() => setShowLog(false)} />}
     </div>
   );
