@@ -1054,6 +1054,23 @@ if (!userProfile) return (
     <div style={{ fontWeight: 700, color: "#6C63FF", fontSize: 16 }}>Setting up your account...</div>
   </div>
 );
+if (userProfile && userProfile.active === false) return (
+  <div style={{
+    minHeight: "100vh", display: "flex", alignItems: "center",
+    justifyContent: "center", background: "#0F172A", flexDirection: "column", gap: 16,
+    fontFamily: "'Segoe UI', sans-serif"
+  }}>
+    <div style={{ fontSize: 48 }}>🚫</div>
+    <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>Account Deactivated</div>
+    <div style={{ fontSize: 14, color: "#64748B", textAlign: "center", maxWidth: 320 }}>
+      Your account has been deactivated by the admin. Please contact your project coordinator.
+    </div>
+    <button onClick={() => signOut(auth)}
+      style={{ marginTop: 8, background: "#EF4444", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+      Sign Out
+    </button>
+  </div>
+);
   
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#F0F4F8", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
