@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db, auth, googleProvider } from "./firebase";
 import {
   collection,
@@ -7,6 +7,7 @@ import {
   setDoc,
   deleteDoc,
   addDoc,
+  getDoc,
   query,
   orderBy,
   limit,
@@ -321,9 +322,412 @@ function ProjectModal({ initial, onSave, onClose }) {
   );
 }
 
+// ─── Admin Panel Component ────────────────────────────────────────────────────
+// Add this entire component to your App.jsx just before the Main App function
+
+function AdminPanel({ onClose, projects, db }) {
+  const [activeTab, setActiveTab] = useState("users");
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState(null);
+  const [newUser, setNewUser] = useState({ name: "", email: "", role: "member", assignedProjects: [], canEdit: true, active: true, course: "", year: "" });
+  const [showAddUser, setShowAddUser] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), snap => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  async function toggleActive(user) {
+    await setDoc(doc(db, "users", user.id), { active: !user.active }, { merge: true });
+  }
+
+  async function updateUser(user) {
+    const { id, ...data } = user;
+    await setDoc(doc(db, "users", id), data, { merge: true });
+    setEditingUser(null);
+  }
+
+  async function addUser() {
+    if (!newUser.email || !newUser.name) { alert("Name and email are required!"); return; }
+    await setDoc(doc(db, "users", newUser.email), newUser);
+    setNewUser({ name: "", email: "", role: "member", assignedProjects: [], canEdit: true, active: true, course: "", year: "" });
+    setShowAddUser(false);
+  }
+
+  async function deleteUser(userId) {
+    if (!window.confirm("Remove this user from the system?")) return;
+    await deleteDoc(doc(db, "users", userId));
+  }
+
+  const roleColor = { admin: "#6C63FF", mentor: "#3B82F6", member: "#10B981", public: "#94A3B8" };
+  const roleBg = { admin: "#EEF2FF", mentor: "#EFF6FF", member: "#D1FAE5", public: "#F1F5F9" };
+
+  // ─── Performance Analysis ─────────────────────────────────────────────────
+  function getMemberStats() {
+    const stats = {};
+    projects.forEach(p => {
+      p.modules?.forEach(m => {
+        m.assignees?.forEach(name => {
+          if (!stats[name]) stats[name] = { name, totalModules: 0, completedModules: 0, inProgress: 0, avgProgress: 0, totalProgress: 0 };
+          stats[name].totalModules++;
+          if (m.status === "done") stats[name].completedModules++;
+          if (m.status === "in-progress") stats[name].inProgress++;
+          stats[name].totalProgress += m.progress;
+          stats[name].avgProgress = Math.round(stats[name].totalProgress / stats[name].totalModules);
+        });
+      });
+    });
+    return Object.values(stats).sort((a, b) => b.avgProgress - a.avgProgress);
+  }
+
+  const tabStyle = (tab) => ({
+    padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer",
+    fontWeight: 700, fontSize: 12,
+    background: activeTab === tab ? "#6C63FF" : "#F1F5F9",
+    color: activeTab === tab ? "#fff" : "#64748B",
+  });
+
+  const inputStyle = {
+    padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E2E8F0",
+    fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box",
+    fontFamily: "inherit", color: "#1E293B", background: "#FAFAFA",
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex" }}>
+      <div style={{ flex: 1, background: "rgba(15,23,42,0.5)", backdropFilter: "blur(3px)" }} onClick={onClose} />
+      <div style={{ width: 700, background: "#fff", height: "100%", overflowY: "auto", boxShadow: "-8px 0 40px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column" }}>
+
+        {/* Header */}
+        <div style={{ padding: "18px 24px", borderBottom: "1.5px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "#fff", zIndex: 10 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0F172A" }}>⚙️ Admin Panel</div>
+            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>Manage users, projects, and view reports</div>
+          </div>
+          <button onClick={onClose} style={{ background: "#F1F5F9", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: "pointer", color: "#64748B" }}>×</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ padding: "14px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 8 }}>
+          <button style={tabStyle("users")} onClick={() => setActiveTab("users")}>👥 Users</button>
+          <button style={tabStyle("projects")} onClick={() => setActiveTab("projects")}>📁 Projects</button>
+          <button style={tabStyle("reports")} onClick={() => setActiveTab("reports")}>📊 Reports</button>
+          <button style={tabStyle("performance")} onClick={() => setActiveTab("performance")}>👤 Performance</button>
+        </div>
+
+        <div style={{ padding: "20px 24px", flex: 1 }}>
+
+          {/* ─── USERS TAB ─────────────────────────────────────────────────── */}
+          {activeTab === "users" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#0F172A" }}>All Users ({users.length})</div>
+                <button onClick={() => setShowAddUser(!showAddUser)}
+                  style={{ background: "#6C63FF", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                  + Add User
+                </button>
+              </div>
+
+              {/* Add User Form */}
+              {showAddUser && (
+                <div style={{ background: "#F8FAFC", borderRadius: 12, padding: 16, marginBottom: 16, border: "1.5px solid #E2E8F0" }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: "#0F172A", marginBottom: 12 }}>➕ Add New User</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>NAME</div>
+                      <input value={newUser.name} onChange={e => setNewUser(u => ({ ...u, name: e.target.value }))} placeholder="Full name" style={inputStyle} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>EMAIL</div>
+                      <input value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))} placeholder="email@rbmi.in" style={inputStyle} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>ROLE</div>
+                      <select value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))} style={inputStyle}>
+                        <option value="member">Member</option>
+                        <option value="mentor">Mentor</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>COURSE</div>
+                      <input value={newUser.course} onChange={e => setNewUser(u => ({ ...u, course: e.target.value }))} placeholder="B.Tech CSE" style={inputStyle} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>YEAR</div>
+                      <input value={newUser.year} onChange={e => setNewUser(u => ({ ...u, year: e.target.value }))} placeholder="3rd Year" style={inputStyle} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>ASSIGN PROJECTS</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {projects.map(p => (
+                          <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, cursor: "pointer" }}>
+                            <input type="checkbox"
+                              checked={newUser.assignedProjects.includes(p.id)}
+                              onChange={e => setNewUser(u => ({
+                                ...u,
+                                assignedProjects: e.target.checked
+                                  ? [...u.assignedProjects, p.id]
+                                  : u.assignedProjects.filter(id => id !== p.id)
+                              }))} />
+                            {p.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <button onClick={() => setShowAddUser(false)}
+                      style={{ flex: 1, padding: "8px", borderRadius: 8, border: "1.5px solid #E2E8F0", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#64748B" }}>Cancel</button>
+                    <button onClick={addUser}
+                      style={{ flex: 2, padding: "8px", borderRadius: 8, border: "none", background: "#6C63FF", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Add User</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Users List */}
+              {loading ? <div style={{ textAlign: "center", color: "#94A3B8", padding: 32 }}>Loading...</div> : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {users.sort((a, b) => {
+                    const order = { admin: 0, mentor: 1, member: 2 };
+                    return (order[a.role] ?? 3) - (order[b.role] ?? 3);
+                  }).map(u => (
+                    <div key={u.id} style={{ background: u.active ? "#F8FAFC" : "#FEF2F2", borderRadius: 12, padding: "12px 16px", border: `1.5px solid ${u.active ? "#E2E8F0" : "#FEE2E2"}` }}>
+                      {editingUser?.id === u.id ? (
+                        // Edit Mode
+                        <div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <input value={editingUser.name} onChange={e => setEditingUser(eu => ({ ...eu, name: e.target.value }))} style={inputStyle} placeholder="Name" />
+                            <input value={editingUser.email} onChange={e => setEditingUser(eu => ({ ...eu, email: e.target.value }))} style={inputStyle} placeholder="Email" />
+                            <select value={editingUser.role} onChange={e => setEditingUser(eu => ({ ...eu, role: e.target.value }))} style={inputStyle}>
+                              <option value="member">Member</option>
+                              <option value="mentor">Mentor</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                            <select value={editingUser.canEdit ? "true" : "false"} onChange={e => setEditingUser(eu => ({ ...eu, canEdit: e.target.value === "true" }))} style={inputStyle}>
+                              <option value="true">Can Edit</option>
+                              <option value="false">View Only</option>
+                            </select>
+                            <input value={editingUser.course || ""} onChange={e => setEditingUser(eu => ({ ...eu, course: e.target.value }))} style={inputStyle} placeholder="Course" />
+                            <input value={editingUser.year || ""} onChange={e => setEditingUser(eu => ({ ...eu, year: e.target.value }))} style={inputStyle} placeholder="Year" />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>ASSIGNED PROJECTS</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {projects.map(p => (
+                                <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, cursor: "pointer", background: "#fff", padding: "3px 8px", borderRadius: 6, border: "1px solid #E2E8F0" }}>
+                                  <input type="checkbox"
+                                    checked={editingUser.assignedProjects?.includes(p.id)}
+                                    onChange={e => setEditingUser(eu => ({
+                                      ...eu,
+                                      assignedProjects: e.target.checked
+                                        ? [...(eu.assignedProjects || []), p.id]
+                                        : eu.assignedProjects.filter(id => id !== p.id)
+                                    }))} />
+                                  {p.name}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={() => setEditingUser(null)}
+                              style={{ flex: 1, padding: "7px", borderRadius: 7, border: "1.5px solid #E2E8F0", background: "#fff", fontWeight: 700, fontSize: 11, cursor: "pointer", color: "#64748B" }}>Cancel</button>
+                            <button onClick={() => updateUser(editingUser)}
+                              style={{ flex: 2, padding: "7px", borderRadius: 7, border: "none", background: "#6C63FF", color: "#fff", fontWeight: 700, fontSize: 11, cursor: "pointer" }}>Save Changes</button>
+                          </div>
+                        </div>
+                      ) : (
+                        // View Mode
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                              <span style={{ fontWeight: 800, fontSize: 13, color: u.active ? "#0F172A" : "#94A3B8" }}>{u.name}</span>
+                              <span style={{ background: roleBg[u.role], color: roleColor[u.role], borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{u.role}</span>
+                              {!u.active && <span style={{ background: "#FEE2E2", color: "#EF4444", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>Inactive</span>}
+                              {u.canEdit && u.role === "member" && <span style={{ background: "#D1FAE5", color: "#10B981", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>Can Edit</span>}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#64748B" }}>{u.email}</div>
+                            {u.course && <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>{u.course} · {u.year}</div>}
+                            {u.assignedProjects?.length > 0 && (
+                              <div style={{ fontSize: 10, color: "#6C63FF", marginTop: 3 }}>
+                                📁 {u.assignedProjects.map(pid => projects.find(p => p.id === pid)?.name || pid).join(", ")}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={() => setEditingUser(u)}
+                              style={{ background: "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#475569" }}>✏️ Edit</button>
+                            <button onClick={() => toggleActive(u)}
+                              style={{ background: u.active ? "#FEF2F2" : "#D1FAE5", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: u.active ? "#EF4444" : "#10B981" }}>
+                              {u.active ? "Deactivate" : "Activate"}
+                            </button>
+                            <button onClick={() => deleteUser(u.id)}
+                              style={{ background: "#FEF2F2", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#EF4444" }}>🗑</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ─── PROJECTS TAB ──────────────────────────────────────────────── */}
+          {activeTab === "projects" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", marginBottom: 4 }}>All Projects ({projects.length})</div>
+              {projects.map(p => {
+                const assignedMembers = users.filter(u => u.assignedProjects?.includes(p.id) && u.role === "member");
+                const mentor = users.find(u => u.email === p.mentor);
+                return (
+                  <div key={p.id} style={{ background: "#F8FAFC", borderRadius: 12, padding: "14px 16px", border: "1.5px solid #E2E8F0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />
+                      <span style={{ fontWeight: 800, fontSize: 13, color: "#0F172A" }}>{p.name}</span>
+                      <span style={{ fontSize: 11, color: "#94A3B8" }}>· {p.team}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6 }}>
+                      👨‍🏫 Mentor: <strong>{mentor?.name || p.mentor || "Not assigned"}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748B", marginBottom: 8 }}>
+                      📅 Deadline: {p.deadline}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", marginBottom: 4 }}>ASSIGNED MEMBERS ({assignedMembers.length})</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {assignedMembers.length === 0
+                          ? <span style={{ fontSize: 11, color: "#CBD5E1" }}>No members assigned</span>
+                          : assignedMembers.map(m => (
+                            <span key={m.id} style={{ background: "#EEF2FF", color: "#4F46E5", borderRadius: 99, padding: "2px 10px", fontSize: 11, fontWeight: 600 }}>
+                              👤 {m.name}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ─── REPORTS TAB ───────────────────────────────────────────────── */}
+          {activeTab === "reports" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#0F172A" }}>📊 Project Reports</div>
+
+              {/* Overall Summary */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                {[
+                  { label: "Total Projects", value: projects.length, color: "#6C63FF" },
+                  { label: "Total Modules", value: projects.reduce((a, p) => a + (p.modules?.length || 0), 0), color: "#F59E0B" },
+                  { label: "Completed Modules", value: projects.reduce((a, p) => a + (p.modules?.filter(m => m.status === "done").length || 0), 0), color: "#10B981" },
+                ].map(s => (
+                  <div key={s.label} style={{ background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", border: "1.5px solid #E2E8F0", textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, marginTop: 2 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Per Project Report */}
+              {projects.map(p => {
+                const total = p.modules?.length || 0;
+                const done = p.modules?.filter(m => m.status === "done").length || 0;
+                const inProg = p.modules?.filter(m => m.status === "in-progress").length || 0;
+                const pending = p.modules?.filter(m => m.status === "pending").length || 0;
+                const progress = total > 0 ? Math.round(p.modules.reduce((a, m) => a + m.progress, 0) / total) : 0;
+                const daysLeft = Math.ceil((new Date(p.deadline) - new Date()) / 86400000);
+
+                return (
+                  <div key={p.id} style={{ background: "#F8FAFC", borderRadius: 12, padding: "14px 16px", border: "1.5px solid #E2E8F0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />
+                        <span style={{ fontWeight: 800, fontSize: 13, color: "#0F172A" }}>{p.name}</span>
+                      </div>
+                      <span style={{ fontSize: 20, fontWeight: 900, color: p.color }}>{progress}%</span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div style={{ background: "#E2E8F0", borderRadius: 99, height: 6, marginBottom: 10 }}>
+                      <div style={{ width: `${progress}%`, height: "100%", background: p.color, borderRadius: 99 }} />
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
+                      {[
+                        { label: "Total", value: total, color: "#64748B" },
+                        { label: "Done", value: done, color: "#10B981" },
+                        { label: "In Progress", value: inProg, color: "#F59E0B" },
+                        { label: "Pending", value: pending, color: "#94A3B8" },
+                      ].map(s => (
+                        <div key={s.label} style={{ textAlign: "center", background: "#fff", borderRadius: 8, padding: "6px" }}>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: s.color }}>{s.value}</div>
+                          <div style={{ fontSize: 9, color: "#94A3B8", fontWeight: 700 }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginTop: 8, fontSize: 11, color: daysLeft < 7 ? "#EF4444" : "#64748B", fontWeight: daysLeft < 7 ? 700 : 400 }}>
+                      {daysLeft > 0 ? `⏰ ${daysLeft} days until deadline` : "⚠️ Deadline passed!"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ─── PERFORMANCE TAB ───────────────────────────────────────────── */}
+          {activeTab === "performance" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", marginBottom: 4 }}>👤 Member Performance</div>
+              <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 8 }}>Based on module assignments and progress across all projects</div>
+
+              {getMemberStats().map((s, i) => (
+                <div key={s.name} style={{ background: "#F8FAFC", borderRadius: 12, padding: "12px 16px", border: "1.5px solid #E2E8F0", display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: i < 3 ? ["#F59E0B", "#94A3B8", "#CD7C2E"][i] : "#E2E8F0", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 13, color: i < 3 ? "#fff" : "#64748B", flexShrink: 0 }}>
+                    {i + 1}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: "#0F172A", marginBottom: 4 }}>{s.name}</div>
+                    <div style={{ background: "#E2E8F0", borderRadius: 99, height: 5, marginBottom: 4 }}>
+                      <div style={{ width: `${s.avgProgress}%`, height: "100%", background: "#6C63FF", borderRadius: 99 }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 10, fontSize: 10, color: "#64748B" }}>
+                      <span>📦 {s.totalModules} modules</span>
+                      <span>✅ {s.completedModules} done</span>
+                      <span>⚡ {s.inProgress} in progress</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: s.avgProgress >= 70 ? "#10B981" : s.avgProgress >= 40 ? "#F59E0B" : "#EF4444" }}>{s.avgProgress}%</div>
+                    <div style={{ fontSize: 9, color: "#94A3B8", fontWeight: 700 }}>AVG PROGRESS</div>
+                  </div>
+                </div>
+              ))}
+
+              {getMemberStats().length === 0 && (
+                <div style={{ textAlign: "center", color: "#CBD5E1", padding: 48, fontSize: 14 }}>
+                  No member data yet. Assign members to modules first.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null); // role, permissions
   const [authLoading, setAuthLoading] = useState(true);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -332,11 +736,28 @@ export default function App() {
   const [projectModal, setProjectModal] = useState(null);
   const [expandedRemark, setExpandedRemark] = useState(null);
   const [showLog, setShowLog] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const isEditing = useRef(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); });
-    return () => unsub();
-  }, []);
+  const unsub = onAuthStateChanged(auth, async u => {
+    setUser(u);
+    if (u) {
+      // Fetch user profile from Firestore using their email as document ID
+      const userDoc = await getDoc(doc(db, "users", u.email));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data());
+      } else {
+        // Email not in database → public view
+        setUserProfile({ role: "public", assignedProjects: [], canEdit: false });
+      }
+    } else {
+      setUserProfile(null);
+    }
+    setAuthLoading(false);
+  });
+  return () => unsub();
+}, []);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "projects"), (snapshot) => {
@@ -347,6 +768,18 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+// Filter projects based on role
+const visibleProjects = userProfile?.role === "admin"
+  ? projects  // admin sees all
+  : userProfile?.role === "mentor"
+  ? projects.filter(p => userProfile.assignedProjects.includes(p.id))  // mentor sees assigned
+  : userProfile?.role === "member"
+  ? projects.filter(p => userProfile.assignedProjects.includes(p.id))  // member sees assigned
+  : projects; // public sees all (read only)
+
+// Can the current user edit?
+const canEdit = userProfile?.role === "admin" ||
+  (userProfile?.role === "member" && userProfile?.canEdit === true);
 
   const selected = projects.find(p => p.id === selectedId);
   const openModule = selected?.modules.find(m => m.id === openModuleId) || null;
@@ -445,8 +878,15 @@ export default function App() {
     </div>
   );
 
-  if (!user) return <LoginPage />;
+ if (!user) return <LoginPage />;
 
+if (!userProfile) return (
+  <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",
+    justifyContent: "center", background: "#F0F4F8", flexDirection: "column", gap: 12 }}>
+    <div style={{ fontSize: 36 }}>⏳</div>
+    <div style={{ fontWeight: 700, color: "#6C63FF", fontSize: 16 }}>Setting up your account...</div>
+  </div>
+);
   
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#F0F4F8", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -461,14 +901,18 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={() => setShowLog(true)}
-            style={{ background: "#1E293B", color: "#94A3B8", border: "1px solid #334155", borderRadius: 9, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            📋 Activity Log
-          </button>
-          <button onClick={() => setProjectModal("new")}
-            style={{ background: "#6C63FF", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-            + New Project
-          </button>
+          {userProfile?.role === "admin" && (
+            <button onClick={() => setShowAdmin(true)}
+              style={{ background: "#6C63FF", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+              ⚙️ Admin Panel
+            </button>
+          )}
+          {userProfile?.role === "admin" && (
+            <button onClick={() => setProjectModal("new")}
+              style={{ background: "#6C63FF", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              + New Project
+            </button>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, padding: "6px 12px", background: "#1E293B", borderRadius: 10, border: "1px solid #334155" }}>
             <img src={user.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
             <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{user.displayName?.split(" ")[0]}</div>
@@ -502,7 +946,7 @@ export default function App() {
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, padding: "16px 24px 24px", flex: 1 }}>
         {/* Sidebar */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {projects.map(p => {
+          {visibleProjects.map(p => {
             const prog = getProjectProgress(p.modules);
             const days = getDaysLeft(p.deadline);
             const isSel = selectedId === p.id;
@@ -513,8 +957,10 @@ export default function App() {
                   border: `2px solid ${isSel ? p.color : "#E2E8F0"}`, transition: "all 0.2s" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                   <div style={{ fontWeight: 800, fontSize: 13, color: isSel ? "#fff" : "#1E293B", lineHeight: 1.3, flex: 1 }}>{p.name}</div>
-                  <button onClick={e => { e.stopPropagation(); setProjectModal(p); }}
-                    style={{ background: "none", border: "none", color: isSel ? "rgba(255,255,255,0.6)" : "#CBD5E1", cursor: "pointer", fontSize: 13, padding: "0 0 0 4px", lineHeight: 1 }}>✏️</button>
+                  {userProfile?.role === "admin" && (
+                    <button onClick={e => { e.stopPropagation(); setProjectModal(p); }}
+                      style={{ background: "none", border: "none", color: isSel ? "rgba(255,255,255,0.6)" : "#CBD5E1", cursor: "pointer", fontSize: 13, padding: "0 0 0 4px", lineHeight: 1 }}>✏️</button>
+                  )}
                 </div>
                 <div style={{ fontSize: 11, color: isSel ? "rgba(255,255,255,0.65)" : "#94A3B8", marginBottom: 10 }}>
                   {p.team} · {p.modules.filter(m => m.status === "done").length}/{p.modules.length} done
@@ -550,10 +996,14 @@ export default function App() {
                   <div style={{ fontSize: 26, fontWeight: 900, color: selected.color, lineHeight: 1 }}>{getProjectProgress(selected.modules)}%</div>
                   <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 600 }}>COMPLETE</div>
                 </div>
-                <button onClick={addModule}
-                  style={{ background: selected.color, color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>+ Module</button>
-                <button onClick={() => deleteProject(selected.id)}
-                  style={{ background: "#FEF2F2", color: "#EF4444", border: "1.5px solid #FEE2E2", borderRadius: 9, padding: "8px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>🗑</button>
+                {canEdit && (
+                    <button onClick={addModule}
+                      style={{ background: selected.color, color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>+ Module</button>
+                  )}
+                {userProfile?.role === "admin" && (
+                  <button onClick={() => deleteProject(selected.id)}
+                    style={{ background: "#FEF2F2", color: "#EF4444", border: "1.5px solid #FEE2E2", borderRadius: 9, padding: "8px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>🗑</button>
+                )}
               </div>
             </div>
             <div style={{ padding: "10px 20px", background: "#F8FAFC", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 14 }}>
@@ -615,8 +1065,10 @@ export default function App() {
                             </span>
                           : <span style={{ color: "#CBD5E1" }}>—</span>}
                       </div>
-                      <button onClick={() => setOpenModuleId(m.id)}
-                        style={{ background: "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#475569" }}>✏️ Edit</button>
+                      {canEdit && (
+                        <button onClick={() => setOpenModuleId(m.id)}
+                          style={{ background: "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#475569" }}>✏️ Edit</button>
+                      )}
                     </div>
                     {isExp && hasRemarks && (
                       <div style={{ padding: "0 20px 14px 20px", display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
@@ -650,6 +1102,7 @@ export default function App() {
 
       {openModule && <ModulePanel module={openModule} project={selected} onClose={() => setOpenModuleId(null)} onSave={saveModule} onDelete={deleteModule} />}
       {projectModal && <ProjectModal initial={projectModal === "new" ? null : projectModal} onSave={handleProjectSave} onClose={() => setProjectModal(null)} />}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} projects={projects} db={db} />}
       {showLog && <ActivityLog onClose={() => setShowLog(false)} />}
     </div>
   );
