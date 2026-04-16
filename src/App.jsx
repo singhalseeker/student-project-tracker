@@ -158,10 +158,11 @@ function LoginPage() {
   setLoading(true);
   try {
     googleProvider.setCustomParameters({ prompt: "select_account" });
-    const isMobileDevice = window.innerWidth < 768 ||
-      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // Always use redirect on mobile, popup on desktop
+    const isMobileDevice = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(navigator.userAgent);
     if (isMobileDevice) {
       await signInWithRedirect(auth, googleProvider);
+      // Don't set loading false — page will redirect
     } else {
       await signInWithPopup(auth, googleProvider);
     }
