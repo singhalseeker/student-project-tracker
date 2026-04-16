@@ -4,7 +4,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   addDoc, getDoc, query, orderBy, limit,
 } from "firebase/firestore";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, browserLocalPersistence, setPersistence } from "firebase/auth";
 
 const COLORS = ["#6C63FF","#F59E0B","#10B981","#EF4444","#3B82F6","#EC4899","#8B5CF6","#14B8A6"];
 
@@ -154,15 +154,14 @@ function Field({ label, children, dark = false }) {
 function LoginPage() {
   const [loading, setLoading] = useState(false);
 
-  async function handleGoogle() {
+async function handleGoogle() {
   setLoading(true);
   try {
     googleProvider.setCustomParameters({ prompt: "select_account" });
-    // Always use redirect on mobile, popup on desktop
     const isMobileDevice = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(navigator.userAgent);
     if (isMobileDevice) {
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithRedirect(auth, googleProvider);
-      // Don't set loading false — page will redirect
     } else {
       await signInWithPopup(auth, googleProvider);
     }
