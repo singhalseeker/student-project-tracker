@@ -4,7 +4,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   addDoc, getDoc, query, orderBy, limit,
 } from "firebase/firestore";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, browserLocalPersistence, setPersistence } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 const COLORS = ["#6C63FF","#F59E0B","#10B981","#EF4444","#3B82F6","#EC4899","#8B5CF6","#14B8A6"];
 
@@ -158,13 +158,7 @@ async function handleGoogle() {
   setLoading(true);
   try {
     googleProvider.setCustomParameters({ prompt: "select_account" });
-    const isMobileDevice = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(navigator.userAgent);
-    if (isMobileDevice) {
-      await setPersistence(auth, browserLocalPersistence);
-      await signInWithRedirect(auth, googleProvider);
-    } else {
-      await signInWithPopup(auth, googleProvider);
-    }
+    await signInWithPopup(auth, googleProvider);
   } catch (e) {
     console.error(e);
     alert(`Error: ${e.code}`);
@@ -917,18 +911,6 @@ export default function App() {
 
   // ── Auth listener (FIXED: resets selectedId on login) ────────────────────
   useEffect(() => {
-  // First handle any pending redirect result from mobile login
-  getRedirectResult(auth)
-    .then(result => {
-      if (result?.user) {
-        console.log("Redirect sign-in successful:", result.user.email);
-      }
-    })
-    .catch(e => {
-      console.error("Redirect error:", e.code);
-    });
-
-  // Then listen for auth state changes
   const unsub = onAuthStateChanged(auth, async u => {
     setUser(u);
     setSelectedId(null);
