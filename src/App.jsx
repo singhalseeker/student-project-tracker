@@ -70,10 +70,7 @@ function useTheme() {
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   // Handle Google redirect result on mobile
-  useEffect(() => {
-    getRedirectResult(auth).catch(e => console.error("Redirect error:", e));
-  }, []);
-  useEffect(() => {
+    useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
@@ -920,23 +917,35 @@ export default function App() {
 
   // ── Auth listener (FIXED: resets selectedId on login) ────────────────────
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async u => {
-      setUser(u);
-      setSelectedId(null); // ← FIX: reset so correct project is auto-selected
-      if (u) {
-        const userDoc = await getDoc(doc(db, "users", u.email));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data());
-        } else {
-          setUserProfile({ role: "public", assignedProjects: [], canEdit: false, active: true });
-        }
-      } else {
-        setUserProfile(null);
+  // First handle any pending redirect result from mobile login
+  getRedirectResult(auth)
+    .then(result => {
+      if (result?.user) {
+        console.log("Redirect sign-in successful:", result.user.email);
       }
-      setAuthLoading(false);
+    })
+    .catch(e => {
+      console.error("Redirect error:", e.code);
     });
-    return () => unsub();
-  }, []);
+
+  // Then listen for auth state changes
+  const unsub = onAuthStateChanged(auth, async u => {
+    setUser(u);
+    setSelectedId(null);
+    if (u) {
+      const userDoc = await getDoc(doc(db, "users", u.email));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data());
+      } else {
+        setUserProfile({ role: "public", assignedProjects: [], canEdit: false, active: true });
+      }
+    } else {
+      setUserProfile(null);
+    }
+    setAuthLoading(false);
+  });
+  return () => unsub();
+}, []);
 
   // ── Projects listener ─────────────────────────────────────────────────────
   useEffect(() => {
