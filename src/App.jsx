@@ -176,12 +176,10 @@ function LoginPage() {
 }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #0A0F1E 0%, #0F1629 40%, #141B2D 70%, #0A0F1E 100%)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontFamily: "'Segoe UI', system-ui, sans-serif", position: "relative", overflow: "hidden",
-    }}>
+    <div style={{ padding: "16px 20px",
+  background: "linear-gradient(135deg,rgba(108,99,255,0.2),rgba(59,130,246,0.1))",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+  display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Background orbs */}
       <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(108,99,255,0.15) 0%, transparent 70%)", top: "10%", left: "20%", pointerEvents: "none" }} />
       <div style={{ position: "absolute", width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%)", bottom: "20%", right: "15%", pointerEvents: "none" }} />
@@ -523,22 +521,22 @@ function Leaderboard({ onClose, projects }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(5,8,20,0.92)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', system-ui, sans-serif" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: "min(900px, 95vw)", maxHeight: "90vh", background: "linear-gradient(145deg, #0F1629 0%, #141B2D 50%, #0A0F1E 100%)", borderRadius: 24, border: "1px solid rgba(108,99,255,0.3)", boxShadow: "0 0 80px rgba(108,99,255,0.15), 0 32px 64px rgba(0,0,0,0.6)", overflow: "hidden", display: "flex", flexDirection: "column", opacity: animateIn ? 1 : 0, transform: animateIn ? "scale(1) translateY(0)" : "scale(0.95) translateY(20px)", transition: "all 0.4s cubic-bezier(0.34,1.56,0.64,1)" }}>
-        <div style={{ padding: "24px 28px 20px", background: "linear-gradient(135deg,rgba(108,99,255,0.2),rgba(59,130,246,0.1))", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", letterSpacing: "-0.5px", display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 28 }}>🏆</span>Student Leaderboard</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 3 }}>Live rankings · Academic Year 2025–26</div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: 4, display: "flex", gap: 4 }}>
-              {["overall", "projects"].map(v => (
-                <button key={v} onClick={() => setView(v)} style={{ padding: "6px 14px", borderRadius: 7, border: "none", cursor: "pointer", background: view === v ? "#6C63FF" : "transparent", color: view === v ? "#fff" : "rgba(255,255,255,0.4)", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", transition: "all 0.2s" }}>
-                  {v === "overall" ? "🏅 Overall" : "📁 Projects"}
-                </button>
-              ))}
-            </div>
-            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-          </div>
-        </div>
+        <div style={{ padding: "16px 20px", background: "linear-gradient(135deg,rgba(108,99,255,0.2),rgba(59,130,246,0.1))", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", gap: 10 }}>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontSize: 24 }}>🏆</span> Student Leaderboard
+    </div>
+    <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+  </div>
+  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Live rankings · Academic Year 2025–26</div>
+  <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: 4, display: "flex", gap: 4, alignSelf: "flex-start" }}>
+    {["overall", "projects"].map(v => (
+      <button key={v} onClick={() => setView(v)} style={{ padding: "6px 14px", borderRadius: 7, border: "none", cursor: "pointer", background: view === v ? "#6C63FF" : "transparent", color: view === v ? "#fff" : "rgba(255,255,255,0.4)", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", transition: "all 0.2s" }}>
+        {v === "overall" ? "🏅 Overall" : "📁 Projects"}
+      </button>
+    ))}
+  </div>
+</div>
         <div style={{ overflowY: "auto", flex: 1, padding: "24px 28px" }}>
           {view === "overall" && (
             <div>
