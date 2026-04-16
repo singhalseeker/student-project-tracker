@@ -707,11 +707,11 @@ function AdminPanel({ onClose, projects, db, dark = false }) {
           </div>
           <button onClick={onClose} style={{ background: dark ? "#2A3550" : "#F1F5F9", border: "none", borderRadius: 8, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: t.textSub }}>×</button>
         </div>
-        <div style={{ padding: "14px 24px", borderBottom: `1px solid ${t.cardBorder}`, display: "flex", gap: 8 }}>
+        <div style={{ padding: "12px 16px", borderBottom: `1px solid ${t.cardBorder}`, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
           <button style={tabStyle("users")} onClick={() => setActiveTab("users")}>👥 Users</button>
           <button style={tabStyle("projects")} onClick={() => setActiveTab("projects")}>📁 Projects</button>
           <button style={tabStyle("reports")} onClick={() => setActiveTab("reports")}>📊 Reports</button>
-          <button style={tabStyle("performance")} onClick={() => setActiveTab("performance")}>👤 Performance</button>
+          <button style={tabStyle("performance")} onClick={() => setActiveTab("performance")}>👤 Perf.</button>
         </div>
         <div style={{ padding: "20px 24px", flex: 1 }}>
 
@@ -762,8 +762,8 @@ function AdminPanel({ onClose, projects, db, dark = false }) {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                               <span style={{ fontWeight: 800, fontSize: 13, color: u.active ? t.text : t.textSub }}>{u.name}</span>
                               <span style={{ background: roleBg[u.role], color: roleColor[u.role], borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{u.role}</span>
@@ -774,11 +774,11 @@ function AdminPanel({ onClose, projects, db, dark = false }) {
                             {u.course && <div style={{ fontSize: 10, color: t.textSub, marginTop: 2, opacity: 0.7 }}>{u.course} · {u.year}</div>}
                             {u.assignedProjects?.length > 0 && <div style={{ fontSize: 10, color: "#6C63FF", marginTop: 3 }}>📁 {u.assignedProjects.map(pid => projects.find(p => p.id === pid)?.name || pid).join(", ")}</div>}
                           </div>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => setEditingUser(u)} style={{ background: dark ? "#2A3550" : "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: t.textSub }}>✏️</button>
-                            <button onClick={() => toggleActive(u)} style={{ background: u.active ? dark ? "#2D0A0A" : "#FEF2F2" : dark ? "#064E3B" : "#D1FAE5", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: u.active ? "#EF4444" : "#10B981" }}>{u.active ? "Deactivate" : "Activate"}</button>
-                            <button onClick={() => deleteUser(u.id)} style={{ background: dark ? "#2D0A0A" : "#FEF2F2", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#EF4444" }}>🗑</button>
-                          </div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                              <button onClick={() => setEditingUser(u)} style={{ background: dark ? "#2A3550" : "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: t.textSub }}>✏️</button>
+                              <button onClick={() => toggleActive(u)} style={{ background: u.active ? dark ? "#2D0A0A" : "#FEF2F2" : dark ? "#064E3B" : "#D1FAE5", border: "none", borderRadius: 7, padding: "6px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: u.active ? "#EF4444" : "#10B981" }}>{u.active ? "Deactivate" : "Activate"}</button>
+                              <button onClick={() => deleteUser(u.id)} style={{ background: dark ? "#2D0A0A" : "#FEF2F2", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#EF4444" }}>🗑</button>
+                            </div>
                         </div>
                       )}
                     </div>
