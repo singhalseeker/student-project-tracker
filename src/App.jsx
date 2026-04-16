@@ -4,7 +4,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   addDoc, getDoc, query, orderBy, limit,
 } from "firebase/firestore";
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "firebase/auth";
 
 const COLORS = ["#6C63FF","#F59E0B","#10B981","#EF4444","#3B82F6","#EC4899","#8B5CF6","#14B8A6"];
 
@@ -64,6 +64,21 @@ function useTheme() {
     remarkFaculty: dark ? "#1E1B4B" : "#F0F4FF",
   };
   return { ...t, toggle };
+}
+
+// ─── Mobile Detection ─────────────────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  // Handle Google redirect result on mobile
+  useEffect(() => {
+    getRedirectResult(auth).catch(e => console.error("Redirect error:", e));
+  }, []);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
 }
 
 function CircularProgress({ value, color, size = 44, strokeWidth = 4 }) {
@@ -143,16 +158,22 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleGoogle() {
-    setLoading(true);
-    try {
-      googleProvider.setCustomParameters({ prompt: "select_account" });
+  setLoading(true);
+  try {
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+    const isMobileDevice = window.innerWidth < 768 ||
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobileDevice) {
+      await signInWithRedirect(auth, googleProvider);
+    } else {
       await signInWithPopup(auth, googleProvider);
-    } catch (e) {
-      console.error(e);
-      alert(`Error: ${e.code}`);
-      setLoading(false);
     }
+  } catch (e) {
+    console.error(e);
+    alert(`Error: ${e.code}`);
+    setLoading(false);
   }
+}
 
   return (
     <div style={{
@@ -863,6 +884,7 @@ function AdminPanel({ onClose, projects, db, dark = false }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const theme = useTheme();
+  const isMobile = useIsMobile();
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -876,6 +898,7 @@ export default function App() {
   const [showLog, setShowLog] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [mentorRemarksModule, setMentorRemarksModule] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -1150,8 +1173,238 @@ export default function App() {
 
   const dark = theme.dark;
 
-  return (
-    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: theme.bg, minHeight: "100vh", display: "flex", flexDirection: "column", transition: "background 0.3s" }}>
+  // ── Mobile / Desktop Layout ───────────────────────────────────────────────
+  return isMobile ? (
+      <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: theme.bg, minHeight: "100vh", display: "flex", flexDirection: "column", transition: "background 0.3s" }}>
+
+        {/* Mobile Top Bar */}
+        <div style={{ background: theme.nav, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 20px rgba(0,0,0,0.2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 32, height: 32, background: "linear-gradient(135deg, #6C63FF, #3B82F6)", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📊</div>
+            <div style={{ color: "#fff", fontWeight: 900, fontSize: 13 }}>Project Tracker</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button onClick={theme.toggle} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 7, padding: "6px 8px", cursor: "pointer", fontSize: 13, color: "#fff" }}>
+              {dark ? "☀️" : "🌙"}
+            </button>
+            {/* Bell */}
+            <div style={{ position: "relative" }} data-notif="true">
+              <button onClick={() => setShowNotifications(!showNotifications)} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#fff", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+                🔔 {unreadCount > 0 && <span style={{ background: "#EF4444", color: "#fff", borderRadius: 99, padding: "0px 5px", fontSize: 10, fontWeight: 900 }}>{unreadCount}</span>}
+              </button>
+              {showNotifications && (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: "calc(100vw - 32px)", maxWidth: 340, background: dark ? "#1A2235" : "#fff", borderRadius: 14, boxShadow: "0 8px 40px rgba(0,0,0,0.3)", zIndex: 500, border: `1px solid ${dark ? "#2A3550" : "#E2E8F0"}`, overflow: "hidden" }}>
+                  <div style={{ padding: "12px 14px", borderBottom: `1px solid ${dark ? "#2A3550" : "#F1F5F9"}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: dark ? "#F1F5F9" : "#0F172A" }}>🔔 Notifications</div>
+                    {unreadCount > 0 && <button onClick={async () => { for (const n of notifications.filter(n => !n.read)) await setDoc(doc(db, "notifications", n.id), { read: true }, { merge: true }); }} style={{ background: "none", border: "none", color: "#6C63FF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Mark all read</button>}
+                  </div>
+                  <div style={{ maxHeight: 300, overflowY: "auto" }}>
+                    {notifications.length === 0 ? <div style={{ padding: 24, textAlign: "center", color: dark ? "#475569" : "#CBD5E1", fontSize: 13 }}>No notifications 🎉</div>
+                      : notifications.map(n => (
+                        <div key={n.id} onClick={async () => { await setDoc(doc(db, "notifications", n.id), { read: true }, { merge: true }); setShowNotifications(false); }}
+                          style={{ padding: "10px 14px", borderBottom: `1px solid ${dark ? "#1E293B" : "#F8FAFC"}`, cursor: "pointer", background: n.read ? "transparent" : dark ? "rgba(108,99,255,0.08)" : "#F8F7FF" }}>
+                          <div style={{ fontWeight: 700, fontSize: 12, color: n.type === "overdue" ? "#EF4444" : "#F59E0B", marginBottom: 2 }}>{n.title}</div>
+                          <div style={{ fontSize: 11, color: dark ? "#64748B" : "#64748B" }}>{n.message}</div>
+                          <div style={{ fontSize: 10, color: dark ? "#475569" : "#94A3B8", marginTop: 3 }}>{timeAgo(n.timestamp)}</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Hamburger */}
+            <button onClick={() => setShowMobileMenu(!showMobileMenu)} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#fff", fontSize: 16 }}>☰</button>
+          </div>
+        </div>
+
+        {/* Mobile Menu Dropdown */}
+        {showMobileMenu && (
+          <div style={{ background: dark ? "#1A2235" : "#1E293B", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8, borderBottom: `1px solid ${dark ? "#2A3550" : "#334155"}` }}>
+            <button onClick={() => { setShowLeaderboard(true); setShowMobileMenu(false); }} style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 9, padding: "10px", fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "left" }}>🏆 Leaderboard</button>
+            {(userProfile?.role === "admin" || userProfile?.role === "mentor") && (
+              <button onClick={() => { setShowLog(true); setShowMobileMenu(false); }} style={{ background: "rgba(255,255,255,0.06)", color: "#94A3B8", border: "1px solid #334155", borderRadius: 9, padding: "10px", fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "left" }}>📋 Activity Log</button>
+            )}
+            {userProfile?.role === "admin" && (
+              <button onClick={() => { setShowAdmin(true); setShowMobileMenu(false); }} style={{ background: "linear-gradient(135deg, #6C63FF, #4F46E5)", color: "#fff", border: "none", borderRadius: 9, padding: "10px", fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "left" }}>⚙️ Admin Panel</button>
+            )}
+            {userProfile?.role === "admin" && (
+              <button onClick={() => { setProjectModal("new"); setShowMobileMenu(false); }} style={{ background: "linear-gradient(135deg, #10B981, #059669)", color: "#fff", border: "none", borderRadius: 9, padding: "10px", fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "left" }}>+ New Project</button>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: 4 }}>
+              <img src={user.photoURL} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
+              <div>
+                <div style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>{user.displayName}</div>
+                <div style={{ color: "#64748B", fontSize: 10, textTransform: "uppercase", fontWeight: 700 }}>{userProfile?.role}</div>
+              </div>
+              <button onClick={() => { if (window.confirm("Sign out?")) signOut(auth); }} style={{ marginLeft: "auto", background: "rgba(239,68,68,0.1)", border: "none", borderRadius: 7, padding: "6px 12px", color: "#EF4444", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Sign out</button>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Stats Row */}
+        <div style={{ display: "flex", gap: 10, padding: "12px 16px", overflowX: "auto", scrollbarWidth: "none" }}>
+          {[
+            { label: "Progress", value: `${overall}%`, color: "#6C63FF", icon: "🎯" },
+            { label: "Modules", value: totalModules, color: "#F59E0B", icon: "📦" },
+            { label: "Done", value: doneModules, color: "#10B981", icon: "✅" },
+            { label: "Active", value: inProg, color: "#3B82F6", icon: "⚡" },
+          ].map(s => (
+            <div key={s.label} style={{ background: theme.card, borderRadius: 12, padding: "10px 14px", border: `1px solid ${theme.cardBorder}`, flexShrink: 0, textAlign: "center", minWidth: 80 }}>
+              <div style={{ fontSize: 16, marginBottom: 2 }}>{s.icon}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 700, textTransform: "uppercase" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Mobile Project Pills */}
+        <div style={{ display: "flex", gap: 8, padding: "0 16px 12px", overflowX: "auto", scrollbarWidth: "none" }}>
+          {visibleProjects.map(p => {
+            const isSel = selectedId === p.id;
+            const prog = getProjectProgress(p.modules);
+            return (
+              <button key={p.id} onClick={() => setSelectedId(p.id)}
+                style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 99, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, transition: "all 0.2s",
+                  background: isSel ? p.color : dark ? "#1A2235" : "#fff",
+                  color: isSel ? "#fff" : theme.textSub,
+                  boxShadow: isSel ? `0 4px 14px ${p.color}50` : "none",
+                  border: isSel ? "none" : `1px solid ${theme.cardBorder}`,
+                }}>
+                {p.name.length > 16 ? p.name.slice(0, 14) + "…" : p.name}
+                <span style={{ marginLeft: 6, opacity: 0.8, fontSize: 11 }}>{prog}%</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Mobile Module Cards */}
+        {selected && (
+          <div style={{ padding: "0 16px 100px" }}>
+            {/* Project Header Card */}
+            <div style={{ background: `linear-gradient(135deg, ${selected.color}, ${selected.color}bb)`, borderRadius: 16, padding: "16px", marginBottom: 14, color: "#fff" }}>
+              <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>{selected.name}</div>
+              <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 12 }}>{selected.team} · Due {fmtDate(selected.deadline)}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <ProgressBar value={getProjectProgress(selected.modules)} color="rgba(255,255,255,0.9)" height={6} dark={true} />
+                <span style={{ fontSize: 18, fontWeight: 900, flexShrink: 0 }}>{getProjectProgress(selected.modules)}%</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                {Object.entries(statusConfig).map(([k, v]) => {
+                  const cnt = selected.modules.filter(m => m.status === k).length;
+                  if (!cnt) return null;
+                  return <span key={k} style={{ fontSize: 11, background: "rgba(255,255,255,0.2)", borderRadius: 99, padding: "2px 10px", fontWeight: 700 }}>{v.icon} {cnt} {v.label}</span>;
+                })}
+              </div>
+            </div>
+
+            {/* Search bar mobile */}
+            <div style={{ position: "relative", marginBottom: 12 }}>
+              <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: theme.textMuted }}>🔍</span>
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search modules or members..."
+                style={{ width: "100%", padding: "10px 12px 10px 32px", borderRadius: 12, border: `1.5px solid ${theme.cardBorder}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", color: theme.text, background: theme.input }} />
+            </div>
+
+            {/* Filter pills mobile */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", scrollbarWidth: "none" }}>
+              {[{ key: "all", label: "All", color: "#6C63FF" }, { key: "done", label: "✓ Done", color: "#10B981" }, { key: "in-progress", label: "◑ Active", color: "#F59E0B" }, { key: "pending", label: "○ Pending", color: "#94A3B8" }].map(f => (
+                <button key={f.key} onClick={() => setStatusFilter(f.key)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 11, background: statusFilter === f.key ? f.color : dark ? "#1E293B" : "#F1F5F9", color: statusFilter === f.key ? "#fff" : theme.textSub }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Module Cards */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {filteredModules.length === 0 && (
+                <div style={{ textAlign: "center", padding: 40, color: theme.textMuted }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                  No modules found
+                  <div style={{ marginTop: 10 }}>
+                    <button onClick={() => { setSearchQuery(""); setStatusFilter("all"); }} style={{ background: "#6C63FF", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Clear filters</button>
+                  </div>
+                </div>
+              )}
+              {filteredModules.map(m => {
+                const hasRemarks = m.whatsDone || m.whatsGoingOn || m.remarks;
+                const isExp = expandedRemark === m.id;
+                const daysLeft = m.deadline ? getDaysLeft(m.deadline) : null;
+                return (
+                  <div key={m.id} style={{ background: theme.card, borderRadius: 14, padding: "14px 16px", border: `1px solid ${theme.cardBorder}`, boxShadow: dark ? "none" : "0 1px 4px rgba(0,0,0,0.05)" }}>
+                    {/* Module Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14, color: theme.text, marginBottom: 4 }}>{m.name}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {m.assignees.length === 0
+                            ? <span style={{ fontSize: 11, color: theme.textMuted }}>No members</span>
+                            : m.assignees.map((a, i) => <span key={a + i} style={{ fontSize: 11, background: dark ? "#1E293B" : "#F1F5F9", color: theme.textSub, borderRadius: 99, padding: "1px 8px", fontWeight: 600 }}>👤 {a}</span>)}
+                        </div>
+                      </div>
+                      <Badge status={m.status} dark={dark} />
+                    </div>
+
+                    {/* Progress */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <ProgressBar value={m.progress} color={selected.color} height={6} dark={dark} />
+                      <span style={{ fontSize: 13, fontWeight: 900, color: selected.color, minWidth: 36, textAlign: "right" }}>{m.progress}%</span>
+                    </div>
+
+                    {/* Deadline + Actions */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 11, color: daysLeft !== null && daysLeft < 5 ? "#EF4444" : theme.textSub, fontWeight: 600 }}>
+                        {m.deadline ? `📅 ${fmtDate(m.deadline)}` : "No deadline"}
+                        {daysLeft !== null && daysLeft < 7 && daysLeft >= 0 && <span style={{ marginLeft: 6, color: "#F59E0B", fontWeight: 700 }}>({daysLeft}d left)</span>}
+                        {daysLeft !== null && daysLeft < 0 && <span style={{ marginLeft: 6, color: "#EF4444", fontWeight: 700 }}>(Overdue!)</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {hasRemarks && (
+                          <button onClick={() => setExpandedRemark(isExp ? null : m.id)}
+                            style={{ background: dark ? "#1E293B" : "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", color: selected.color }}>
+                            {isExp ? "▲" : "▼"} Remarks
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button onClick={() => setOpenModuleId(m.id)}
+                            style={{ background: dark ? "#1E293B" : "#F1F5F9", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: theme.textSub }}>✏️</button>
+                        )}
+                        {userProfile?.role === "mentor" && (
+                          <button onClick={() => setMentorRemarksModule(m)}
+                            style={{ background: dark ? "#1E1B4B" : "#EEF2FF", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#6C63FF" }}>📝</button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Expanded Remarks */}
+                    {isExp && hasRemarks && (
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        {m.whatsDone && <div style={{ background: dark ? "rgba(16,185,129,0.08)" : "#F0FDF4", borderRadius: 10, padding: "10px 12px", borderLeft: "3px solid #10B981" }}><div style={{ fontSize: 10, fontWeight: 800, color: "#10B981", textTransform: "uppercase", marginBottom: 4 }}>✅ What's Done</div><div style={{ fontSize: 12, color: theme.text, lineHeight: 1.6 }}>{m.whatsDone}</div></div>}
+                        {m.whatsGoingOn && <div style={{ background: dark ? "rgba(245,158,11,0.08)" : "#FFFBEB", borderRadius: 10, padding: "10px 12px", borderLeft: "3px solid #F59E0B" }}><div style={{ fontSize: 10, fontWeight: 800, color: "#F59E0B", textTransform: "uppercase", marginBottom: 4 }}>⚡ Going On</div><div style={{ fontSize: 12, color: theme.text, lineHeight: 1.6 }}>{m.whatsGoingOn}</div></div>}
+                        {m.remarks && <div style={{ background: dark ? "rgba(108,99,255,0.08)" : "#F0F4FF", borderRadius: 10, padding: "10px 12px", borderLeft: "3px solid #6C63FF" }}><div style={{ fontSize: 10, fontWeight: 800, color: "#6C63FF", textTransform: "uppercase", marginBottom: 4 }}>📝 Faculty</div><div style={{ fontSize: 12, color: theme.text, lineHeight: 1.6 }}>{m.remarks}</div></div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add module FAB for admin/canEdit */}
+            {canEdit && (
+              <button onClick={addModule}
+                style={{ position: "fixed", bottom: 24, right: 24, width: 56, height: 56, borderRadius: "50%", background: `linear-gradient(135deg, ${selected.color}, ${selected.color}cc)`, color: "#fff", border: "none", fontSize: 24, cursor: "pointer", boxShadow: `0 6px 20px ${selected.color}60`, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+            )}
+          </div>
+        )}
+
+        {/* Panels & Modals */}
+        {openModule && <ModulePanel module={openModule} project={selected} onClose={() => setOpenModuleId(null)} onSave={saveModule} onDelete={deleteModule} projectUsers={users} dark={dark} />}
+        {projectModal && <ProjectModal initial={projectModal === "new" ? null : projectModal} onSave={handleProjectSave} onClose={() => setProjectModal(null)} dark={dark} />}
+        {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} projects={projects} db={db} dark={dark} />}
+        {mentorRemarksModule && selected && <MentorRemarksPanel module={mentorRemarksModule} project={selected} onClose={() => setMentorRemarksModule(null)} onSave={saveMentorRemarks} dark={dark} />}
+        {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} projects={projects} />}
+        {showLog && <ActivityLog onClose={() => setShowLog(false)} dark={dark} />}
+      </div>
+    ) : (
+      <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: theme.bg, minHeight: "100vh", display: "flex", flexDirection: "column", transition: "background 0.3s" }}>
 
       {/* ── Top Bar ─────────────────────────────────────────────────────────── */}
       <div style={{ background: theme.nav, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${theme.navBorder}`, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 20px rgba(0,0,0,0.2)" }}>
