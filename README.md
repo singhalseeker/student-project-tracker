@@ -120,7 +120,7 @@ src/
 
 ## 👨‍💻 Developed By
 
-**Prateek Singhal** — RBCET  
+**Prateek Agarwal** — RBCET  
 Academic Year 2025–26
 
 ---
